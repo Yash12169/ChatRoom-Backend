@@ -1,6 +1,5 @@
-from django.shortcuts import render
-from .models import Message,Friendship,PendingRequest,User,Profile,BlackListedUsers
-from .serializers import SendMessageSerializer,FriendRequestSerializer, ListMessageSerializer,ListBlackListSerializer,BlackListSerializer,ShowSearchResultSerializer,DeleteAccountSerializer,AcceptFriendRequestSerializer, ChangePasswordSerializer,RejectFriendRequestSerializer, ListProfileSerializer,RemoveFriendSerializer,ListUserSerializer, ListFriendsSerializer, ListRequestSerializer,ReceiveMessageSerializer
+from .models import Message,Friendship,PendingRequest,User,Profile,BlackListedUsers,ContactForm
+from .serializers import SendMessageSerializer,UsernameSerializer,FriendRequestSerializer,ListMessageSerializer,ContactFormSerializer,ListBlackListSerializer,BlackListSerializer,ShowSearchResultSerializer,DeleteAccountSerializer,AcceptFriendRequestSerializer, ChangePasswordSerializer,RejectFriendRequestSerializer, ListProfileSerializer,RemoveFriendSerializer,ListUserSerializer, ListFriendsSerializer, ListRequestSerializer,ReceiveMessageSerializer
 from rest_framework import status
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -8,9 +7,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.db import models
 from django.shortcuts import get_object_or_404
-from rest_framework.pagination import PageNumberPagination
-from django_ratelimit.decorators import ratelimit
 from chatroom.consumer import send_realtime_message
+
+
+
 class SendMessageView(APIView):
         permission_classes = (IsAuthenticated,)
         def post(self, request):
@@ -37,6 +37,7 @@ class SendMessageView(APIView):
             except Exception as e:
                 return Response({'message':str(e)},status=status.HTTP_400_BAD_REQUEST)
 
+
 class RetrieveMessageView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -44,6 +45,7 @@ class RetrieveMessageView(APIView):
         message = Message.objects.filter(receiver=request.user)
         serializer = ReceiveMessageSerializer(message,many=True)
         return Response({'messages':serializer.data}, status=status.HTTP_200_OK )
+
 
 class ListMessageView(APIView):
     # permission_classes = (IsAuthenticated,)
@@ -63,6 +65,8 @@ class ListMessageView(APIView):
 
         except Exception as e:
             return Response(str(e),status=status.HTTP_400_BAD_REQUEST)
+
+
 class SendFriendRequest(APIView):
     permission_classes = (IsAuthenticated,)
     def post(self,request):
@@ -70,14 +74,12 @@ class SendFriendRequest(APIView):
             serializer = FriendRequestSerializer(data=request.data)
             if serializer.is_valid():
                 user = serializer.validated_data['user']
-                message = serializer.validated_data['message']
-
                 existing_friendship = Friendship.objects.filter(models.Q(user1=request.user, user2=user) | models.Q(user1=user, user2=request.user)).exists()
                 if not existing_friendship:
                     PendingRequest.objects.create(
                         user=user,
                         sender=request.user,
-                        message=message
+
                     )
                     return Response({'message': 'friend request is sent successfully'}, status=status.HTTP_200_OK)
                 else:
@@ -89,16 +91,27 @@ class SendFriendRequest(APIView):
             return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+class GetCurrentUser(APIView):
+    permission_classes = (IsAuthenticated,)
+    def get(self,request):
+        try:
+            username = request.user
+            serializer = UsernameSerializer(username)
+            return Response(serializer.data,status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(str(e),status=status.HTTP_400_BAD_REQUEST)
+
 
 class ListFriendRequest(APIView):
     permission_classes = (IsAuthenticated,)
-    pagination_classes = PageNumberPagination
     def get(self, request):
-        blacklisted_user=BlackListedUsers.objects.filter(user=request.user)
-        list = PendingRequest.objects.filter(user=request.user)
+
+        blacklisted_user = BlackListedUsers.objects.filter(user=request.user)
+        list=PendingRequest.objects.filter(user=request.user)
         filtered_request = list.exclude(sender__in=blacklisted_user.values_list('blocked_user',flat = True))
-        serializer = ListRequestSerializer(filtered_request, many=True)
+        serializer = ListRequestSerializer(filtered_request, many=True,context={'request':request})
         return Response(serializer.data,status=status.HTTP_200_OK)
+
 
 class AcceptFriendRequest(APIView):
     permission_classes = (IsAuthenticated,)
@@ -108,7 +121,8 @@ class AcceptFriendRequest(APIView):
             sender = pending_request.sender
             Friendship.objects.create(
                 user1=request.user,
-                user2=sender
+                user2=sender,
+                status="Accepted"
             )
             serializer = AcceptFriendRequestSerializer(pending_request)
             pending_request.delete()
@@ -152,12 +166,14 @@ class RemoveFriend(APIView):
         except Exception as e:
             return Response({'message':str(e)},status=status.HTTP_400_BAD_REQUEST)
 
+
 class ListUsers(APIView):
 
     def get(self, request):
             all_users = User.objects.all()
             serializer = ListUserSerializer(all_users,many=True)
             return Response(serializer.data,status=status.HTTP_200_OK)
+
 
 class ListProfile(APIView):
     def get(self, request, request_id):
@@ -178,6 +194,7 @@ class SetTheme(APIView):
 
 class SetChangeBackground(APIView):
     pass
+
 
 class BlackListView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -264,6 +281,7 @@ class ChangePassword(APIView):
 
 class DeleteAccount(APIView):
     permission_classes = (IsAuthenticated,)
+
     def post(self,request):
         try:
             serializer=DeleteAccountSerializer(data=request.data)
@@ -289,5 +307,30 @@ class SearchUserView(APIView):
     def get(self,request):
         query=request.query_params.get('query','')
         profile=Profile.objects.filter(user__username__icontains=query)
-        serializer = ShowSearchResultSerializer(profile,many=True)
+        serializer = ShowSearchResultSerializer(profile,many=True,context={'request':request})
         return Response(serializer.data,status=status.HTTP_200_OK)
+
+
+class ContactFormView(APIView):
+        def post(self,request):
+            try:
+                serializer = ContactFormSerializer(data=request.data)
+                if serializer.is_valid():
+                    firstname = serializer.validated_data['firstname']
+                    lastname = serializer.validated_data['lastname']
+                    phone = serializer.validated_data['phone']
+                    message = serializer.validated_data['message']
+                    email = serializer.validated_data['email']
+
+                    ContactForm.objects.create(
+                        firstname=firstname,
+                        lastname=lastname,
+                        phone=phone,
+                        email=email,
+                        message=message
+                    )
+                else:
+                    return Response(serializer.errors,status = status.HTTP_400_BAD_REQUEST)
+
+            except Exception as e:
+                return Response({'message':str(e)},status = status.HTTP_400_BAD_REQUEST)

@@ -7,9 +7,18 @@ User = get_user_model()
 
 
 class Friendship(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected')
+    ]
     user1 = models.ForeignKey(User, related_name='user1_friendships', on_delete=models.CASCADE)
     user2 = models.ForeignKey(User, related_name='user2_friendships', on_delete=models.CASCADE)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+
 
 class PendingRequest(models.Model):
     user   = models.ForeignKey(User, related_name='pending_request',on_delete=models.CASCADE)
@@ -43,3 +52,11 @@ class Settings(models.Model):
 class BlackListedUsers(models.Model):
     user = models.ForeignKey(User, related_name="blacklisted",on_delete=models.CASCADE)
     blocked_user = models.ForeignKey(User,related_name="blacklisteduser",on_delete=models.CASCADE)
+
+
+class ContactForm(models.Model):
+    firstname = models.CharField(max_length=200)
+    lastname = models.CharField(max_length=200)
+    message = models.TextField()
+    phone = models.CharField(max_length=12,null=True)
+    email = models.EmailField()

@@ -1,10 +1,11 @@
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.urls import path, include
-from .views import SendMessageView,RetrieveMessageView,SendFriendRequest,ListFriendRequest,SearchUserView,ListMessageView,AcceptFriendRequest,RejectFriendRequest,RemoveFriend,WhitelistView,BlackListView,ListFriends,ListBlackListView,ListUsers,ListProfile,ChangePassword,DeleteAccount
+from .views import SendMessageView,RetrieveMessageView,GetCurrentUser,SendFriendRequest,ListFriendRequest,SearchUserView,ListMessageView,ContactFormView,AcceptFriendRequest,RejectFriendRequest,RemoveFriend,WhitelistView,BlackListView,ListFriends,ListBlackListView,ListUsers,ListProfile,ChangePassword,DeleteAccount
 urlpatterns = [
     path('send-message/', SendMessageView.as_view(), name='send-message'),
     path('retreive-message/', RetrieveMessageView.as_view(), name='retrieve-message'),
     path('listmessage/', ListMessageView.as_view(), name='list-message'),
+    path('currentuser/', GetCurrentUser.as_view(), name='currentuser'),
     path('send-request/', SendFriendRequest.as_view(), name='send-request'),
     path('requests/', ListFriendRequest.as_view(), name='list-request'),
     path('requests/accept/<int:request_id>/', AcceptFriendRequest.as_view(), name='accept-request'),
@@ -18,6 +19,5 @@ urlpatterns = [
     path('listblacklist/', ListBlackListView.as_view(), name='listblacklist'),
     path('whitelist/', WhitelistView.as_view(), name='whitelist'),
     path('search/', SearchUserView.as_view(), name='search_user'),
-
-
+    path('conact/', ContactFormView.as_view(), name='contact_form'),
 ]

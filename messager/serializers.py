@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Message, Friendship,PendingRequest,User,Profile,BlackListedUsers
+from .models import Message, Friendship,PendingRequest,User,Profile,BlackListedUsers,ContactForm
 
 class ListUserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -18,13 +18,21 @@ class ReceiveMessageSerializer(serializers.ModelSerializer):
 
 class FriendRequestSerializer(serializers.ModelSerializer):
     class Meta:
-        fields = ('id','user','message')
+        fields = ('id','user')
         model = PendingRequest
-
+class UsernameSerializer(serializers.ModelSerializer):
+    class Meta:
+        fields = ('username',)
+        model = User
 class ListRequestSerializer(serializers.ModelSerializer):
     class Meta:
         fields = ('id','user','sender','message')
         model = PendingRequest
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['susername'] = instance.sender.username
+        return representation
 
 class AcceptFriendRequestSerializer(serializers.ModelSerializer):
     class Meta:
@@ -102,9 +110,26 @@ class ShowSearchResultSerializer(serializers.ModelSerializer):
     class Meta:
         fields=('user','about')
         model =Profile
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['username']= instance.user.username
+        return representation
+
 
 
 class ListMessageSerializer(serializers.ModelSerializer):
     class Meta:
         fields=('sender',)
         model = Message
+
+# class FriendshipStatusSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         fields=('status',)
+#         model = FriendshipStatus
+
+
+
+class ContactFormSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactForm
+        fields = ('firstname', 'lastname', 'phone', 'email', 'message')
