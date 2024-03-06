@@ -20,10 +20,20 @@ class FriendRequestSerializer(serializers.ModelSerializer):
     class Meta:
         fields = ('id','user')
         model = PendingRequest
-class UsernameSerializer(serializers.ModelSerializer):
+
+
+class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
-        fields = ('username',)
+        model = Profile
+        fields = ('about','profile_picture')
+class UsernameSerializer(serializers.ModelSerializer):
+    profile = ProfileSerializer()
+    class Meta:
         model = User
+        fields = ('username','id','profile')
+
+
+
 class ListRequestSerializer(serializers.ModelSerializer):
     class Meta:
         fields = ('id','user','sender','message')
@@ -119,7 +129,7 @@ class ShowSearchResultSerializer(serializers.ModelSerializer):
 
 class ListMessageSerializer(serializers.ModelSerializer):
     class Meta:
-        fields=('sender',)
+        fields=('receiver',)
         model = Message
 
 # class FriendshipStatusSerializer(serializers.ModelSerializer):
@@ -133,3 +143,31 @@ class ContactFormSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContactForm
         fields = ('firstname', 'lastname', 'phone', 'email', 'message')
+
+
+class UsernameAvailabilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('username',)
+
+
+class EmailAvailabilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('email',)
+
+
+class ProfilePictureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = '__all__'
+
+
+# class FetchProfilePictureSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Profile
+#         fields = ('profile_picture',)
+
+
+class FetchProfilePictureSerializer(serializers.Serializer):
+    profile_picture = serializers.ImageField()

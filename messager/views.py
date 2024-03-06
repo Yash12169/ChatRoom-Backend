@@ -1,5 +1,5 @@
 from .models import Message,Friendship,PendingRequest,User,Profile,BlackListedUsers,ContactForm
-from .serializers import SendMessageSerializer,UsernameSerializer,FriendRequestSerializer,ListMessageSerializer,ContactFormSerializer,ListBlackListSerializer,BlackListSerializer,ShowSearchResultSerializer,DeleteAccountSerializer,AcceptFriendRequestSerializer, ChangePasswordSerializer,RejectFriendRequestSerializer, ListProfileSerializer,RemoveFriendSerializer,ListUserSerializer, ListFriendsSerializer, ListRequestSerializer,ReceiveMessageSerializer
+from .serializers import SendMessageSerializer,EmailAvailabilitySerializer,ProfilePictureSerializer,UsernameAvailabilitySerializer,UsernameSerializer,FriendRequestSerializer,ListMessageSerializer,ContactFormSerializer,FetchProfilePictureSerializer,ListBlackListSerializer,BlackListSerializer,ShowSearchResultSerializer,DeleteAccountSerializer,AcceptFriendRequestSerializer, ChangePasswordSerializer,RejectFriendRequestSerializer, ListProfileSerializer,RemoveFriendSerializer,ListUserSerializer, ListFriendsSerializer, ListRequestSerializer,ReceiveMessageSerializer
 from rest_framework import status
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -9,7 +9,7 @@ from django.db import models
 from django.shortcuts import get_object_or_404
 from chatroom.consumer import send_realtime_message
 
-
+from .tasks import send_contact_email
 
 class SendMessageView(APIView):
         permission_classes = (IsAuthenticated,)
@@ -20,7 +20,7 @@ class SendMessageView(APIView):
                     sender = request.user
                     content = serializer.validated_data['content']
                     receiver = serializer.validated_data['receiver']
-                    are_friends = Friendship.objects.filter(models.Q(user1=request.user,user2=receiver) |models.Q(user1=receiver,user2=request.user)).exists()
+                    are_friends = Friendship.objects.filter(models.Q(user1=request.user,user2=receiver) | models.Q(user1=receiver,user2=request.user)).exists()
                     if not are_friends:
                         return Response({'message':f'{request.user} is not friends with {receiver}'},status=status.HTTP_400_BAD_REQUEST)
 
@@ -29,7 +29,6 @@ class SendMessageView(APIView):
                         receiver=receiver,
                         content=content,
                     )
-                    send_realtime_message(sender, receiver, content)
 
                     return Response({'message':'message sent successfully','data':serializer.data},status=status.HTTP_200_OK)
 
@@ -48,7 +47,7 @@ class RetrieveMessageView(APIView):
 
 
 class ListMessageView(APIView):
-    # permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,)
     def post(self, request):
         try:
             serializer = ListMessageSerializer(data=request.data)
@@ -57,7 +56,6 @@ class ListMessageView(APIView):
                 person1= request.user
                 person2= serializer.validated_data['receiver']
                 messages = Message.objects.filter(models.Q(sender=person1,receiver=person2)|models.Q(sender=person2,receiver=person1)).order_by('timestamp')
-                print(messages)
                 serializer2 = ReceiveMessageSerializer(messages,many=True)
                 return Response(serializer2.data,status=status.HTTP_200_OK)
             else:
@@ -91,16 +89,30 @@ class SendFriendRequest(APIView):
             return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+# class GetCurrentUser(APIView):
+#     permission_classes = (IsAuthenticated,)
+#     def get(self,request):
+#         try:
+#             username = request.user
+#             user_obj=User.objects.get(username=username)
+#             userprof_obj=Profile.objects.get(username=username)
+#             about = userprof_obj.about
+#             profile_picture = userprof_obj.profile_picture
+#             serializer = UsernameSerializer(username,about,profile_picture)
+#             return Response(serializer.data,status=status.HTTP_200_OK)
+#         except Exception as e:
+#             return Response(str(e),status=status.HTTP_400_BAD_REQUEST)
+#
 class GetCurrentUser(APIView):
     permission_classes = (IsAuthenticated,)
-    def get(self,request):
-        try:
-            username = request.user
-            serializer = UsernameSerializer(username)
-            return Response(serializer.data,status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response(str(e),status=status.HTTP_400_BAD_REQUEST)
 
+    def get(self, request):
+        try:
+            user_obj = request.user
+            serializer = UsernameSerializer(user_obj)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(str(e), status=status.HTTP_400_BAD_REQUEST)
 
 class ListFriendRequest(APIView):
     permission_classes = (IsAuthenticated,)
@@ -321,7 +333,9 @@ class ContactFormView(APIView):
                     phone = serializer.validated_data['phone']
                     message = serializer.validated_data['message']
                     email = serializer.validated_data['email']
-
+                    get_form = ContactForm.objects.filter(email=email).first()
+                    if get_form is not None:
+                        return Response({'message':'You have recently submitted a Response wait for some time to send another'})
                     ContactForm.objects.create(
                         firstname=firstname,
                         lastname=lastname,
@@ -329,8 +343,126 @@ class ContactFormView(APIView):
                         email=email,
                         message=message
                     )
+                    send_contact_email.delay(firstname,lastname,phone, email, message)
+                    return Response(serializer.data,status = status.HTTP_200_OK)
                 else:
-                    return Response(serializer.errors,status = status.HTTP_400_BAD_REQUEST)
+                    return Response(serializer.errors,status = status.HTTP_403_FORBIDDEN)
 
             except Exception as e:
                 return Response({'message':str(e)},status = status.HTTP_400_BAD_REQUEST)
+
+
+
+class UsernameAvailability(APIView):
+        def post(self,request):
+            try:
+                serializer = UsernameAvailabilitySerializer(data = request.data)
+                if serializer.is_valid():
+                    username = serializer.validated_data['username']
+                    users = User.objects.filter(username=username)
+                    if users.exists():
+                        return Response({'available':False},status = status.HTTP_200_OK)
+                    return Response({'available':True},status = status.HTTP_200_OK)
+                else:
+                    return Response(serializer.errors,status = status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                return Response({'message':str(e)},status = status.HTTP_400_BAD_REQUEST)
+
+
+
+class EmailAvailability(APIView):
+    def post(self,request):
+        try:
+            serializer = EmailAvailabilitySerializer(data = request.data)
+            if serializer.is_valid():
+                email = serializer.validated_data['email']
+                users = User.objects.filter(email=email)
+                if users.exists():
+                    return Response({'available':False},status = status.HTTP_200_OK)
+                return Response({'available':True},status = status.HTTP_200_OK)
+            else:
+                return Response(serializer.errors,status = status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'message':str(e)},status = status.HTTP_400_BAD_REQUEST)
+
+# class SaveProfilePicture(APIView):
+#     permission_classes = (IsAuthenticated,)
+#
+#     def post(self, request):
+#         try:
+#             serializer = ProfilePictureSerializer(data=request.data)
+#
+#             if serializer.is_valid():
+#                 profile_picture = serializer.validated_data['profile_picture']
+#                 user = request.user
+#                 user_prof = Profile.objects.get(user=user)
+#                 user_prof.profile_picture = profile_picture
+#                 user_prof.save()
+#                 return Response({'message': 'Profile picture successfully updated'})
+#             else:
+#                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+#         except Profile.DoesNotExist:
+#             return Response({'message': 'Profile does not exist'}, status=status.HTTP_404_NOT_FOUND)
+#         except Exception as e:
+#             return Response({'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class SaveProfilePicture(APIView):
+    def get(self, request, *args, **kwargs):
+        # Assuming you want to get the profile picture for the current user
+        profile = Profile.objects.filter(user=request.user)
+        serializer = ProfilePictureSerializer(profile, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, *args, **kwargs):
+        # Add the user information to associate the profile picture with a user
+        data = request.data.copy()
+        data['user'] = request.user.id
+
+        try:
+            # Try to get the existing profile for the user
+            profile = Profile.objects.get(user=request.user)
+            profile_serializer = ProfilePictureSerializer(profile, data=data)
+        except Profile.DoesNotExist:
+            # If the profile doesn't exist, create a new one
+            profile_serializer = ProfilePictureSerializer(data=data)
+
+        if profile_serializer.is_valid():
+            profile_serializer.save()
+            return Response(profile_serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            print('error', profile_serializer.errors)
+            return Response(profile_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# class FetchProfilePicture(APIView):
+#     # permission_classes = (IsAuthenticated, )
+#     def post(self,request):
+#         try:
+#             serializer=FetchProfilePictureSerializer(data=request.data)
+#             if serializer.is_valid():
+#                 user_id = serializer.validated_data['user_id']
+#                 user = User.objects.get(id=user_id)
+#                 try:
+#                     profile = Profile.objects.get(user=user)
+#                     profile_picture_url = profile.profile_picture.url if profile.profile_picture else None
+#                     return Response(profile_picture_url,status = status.HTTP_200_OK)
+#                 except Profile.DoesNotExist:
+#                     return Response({'message': 'User Not found'},status = status.HTTP_404_NOT_FOUND)
+#             else:
+#                 return Response(serializer.errors,status= status.HTTP_400_BAD_REQUEST)
+#         except Exception as e:
+#             return Response({'message':str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class FetchProfilePicture(APIView):
+    def get(self, request, user_id):
+        try:
+            user = get_object_or_404(User, id=user_id)
+            profile = get_object_or_404(Profile, user=user)
+            serializer = FetchProfilePictureSerializer(profile)
+            return Response(serializer.data)
+
+        except Exception as e:
+            return Response( {'message':str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)

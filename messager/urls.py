@@ -1,6 +1,6 @@
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.urls import path, include
-from .views import SendMessageView,RetrieveMessageView,GetCurrentUser,SendFriendRequest,ListFriendRequest,SearchUserView,ListMessageView,ContactFormView,AcceptFriendRequest,RejectFriendRequest,RemoveFriend,WhitelistView,BlackListView,ListFriends,ListBlackListView,ListUsers,ListProfile,ChangePassword,DeleteAccount
+from .views import SendMessageView,FetchProfilePicture,RetrieveMessageView,GetCurrentUser,SaveProfilePicture,SendFriendRequest,EmailAvailability,ListFriendRequest,SearchUserView,UsernameAvailability,ListMessageView,ContactFormView,AcceptFriendRequest,RejectFriendRequest,RemoveFriend,WhitelistView,BlackListView,ListFriends,ListBlackListView,ListUsers,ListProfile,ChangePassword,DeleteAccount
 urlpatterns = [
     path('send-message/', SendMessageView.as_view(), name='send-message'),
     path('retreive-message/', RetrieveMessageView.as_view(), name='retrieve-message'),
@@ -19,5 +19,9 @@ urlpatterns = [
     path('listblacklist/', ListBlackListView.as_view(), name='listblacklist'),
     path('whitelist/', WhitelistView.as_view(), name='whitelist'),
     path('search/', SearchUserView.as_view(), name='search_user'),
-    path('conact/', ContactFormView.as_view(), name='contact_form'),
+    path('contact/', ContactFormView.as_view(), name='contact_form'),
+    path('availability/', UsernameAvailability.as_view(), name='username_availability'),
+    path('availability-email/', EmailAvailability.as_view(), name='email_availability'),
+    path('save-profile/', SaveProfilePicture.as_view(), name='save_profile_picture'),
+    path('fetch-profile/<int:user_id>/', FetchProfilePicture.as_view(), name='fetch_profile_picture'),
 ]

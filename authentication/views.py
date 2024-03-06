@@ -41,6 +41,7 @@ class UserRegistrationView(APIView):
                 email = serializer.validated_data['email']
                 password = serializer.validated_data['password']
                 about = serializer.validated_data['about']
+                # profile_picture = serializer.validated_data['profile_picture']
                 hashed_password = make_password(password)
                 user = User.objects.create(
                     username=username,
@@ -51,6 +52,7 @@ class UserRegistrationView(APIView):
                 profile=Profile.objects.create(
                     user=user,
                     about=about
+                    # profile_picture=profile_picture
                 )
                 return Response({'message': 'New user is successfully created'},
                                 status=status.HTTP_201_CREATED)

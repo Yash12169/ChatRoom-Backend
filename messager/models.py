@@ -28,7 +28,7 @@ class PendingRequest(models.Model):
 
 class Profile(models.Model):
     user = models.OneToOneField(User, related_name="profile", on_delete=models.CASCADE)
-    profile_picture = models.ImageField(blank=True,null=True)
+    profile_picture = models.ImageField(blank=True,null=True,upload_to='profile_pics')
     about = models.TextField(default="hey i'm  using ChatRoom")
     friends = models.ForeignKey(Friendship, related_name='friends', on_delete=models.CASCADE,null=True)
 
