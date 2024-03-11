@@ -22,15 +22,6 @@ class FriendRequestSerializer(serializers.ModelSerializer):
         model = PendingRequest
 
 
-class ProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Profile
-        fields = ('about','profile_picture')
-class UsernameSerializer(serializers.ModelSerializer):
-    profile = ProfileSerializer()
-    class Meta:
-        model = User
-        fields = ('username','id','profile')
 
 
 
@@ -171,3 +162,38 @@ class ProfilePictureSerializer(serializers.ModelSerializer):
 
 class FetchProfilePictureSerializer(serializers.Serializer):
     profile_picture = serializers.ImageField()
+
+
+class FetchAboutSerializer(serializers.Serializer):
+    about = serializers.DictField()
+
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ('about','profile_picture')
+class UsernameSerializer(serializers.ModelSerializer):
+    profile = ProfileSerializer()
+    class Meta:
+        model = User
+        fields = ('username','id','profile')
+
+
+
+
+
+
+class ChangeAboutSerializerProfile(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ('about',)
+
+class ChangeAboutSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField()  # Change to IntegerField if user_id is an integer
+
+    class Meta:
+        model = Profile
+        fields = ('user_id', 'about',)
+
+    def validate_user_id(self, value):
+        # Add validation logic if needed
+        return value

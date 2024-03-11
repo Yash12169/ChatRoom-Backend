@@ -1,5 +1,5 @@
 from .models import Message,Friendship,PendingRequest,User,Profile,BlackListedUsers,ContactForm
-from .serializers import SendMessageSerializer,EmailAvailabilitySerializer,ProfilePictureSerializer,UsernameAvailabilitySerializer,UsernameSerializer,FriendRequestSerializer,ListMessageSerializer,ContactFormSerializer,FetchProfilePictureSerializer,ListBlackListSerializer,BlackListSerializer,ShowSearchResultSerializer,DeleteAccountSerializer,AcceptFriendRequestSerializer, ChangePasswordSerializer,RejectFriendRequestSerializer, ListProfileSerializer,RemoveFriendSerializer,ListUserSerializer, ListFriendsSerializer, ListRequestSerializer,ReceiveMessageSerializer
+from .serializers import SendMessageSerializer,FetchAboutSerializer,EmailAvailabilitySerializer,ChangeAboutSerializer,ProfilePictureSerializer,UsernameAvailabilitySerializer,UsernameSerializer,FriendRequestSerializer,ListMessageSerializer,ContactFormSerializer,FetchProfilePictureSerializer,ListBlackListSerializer,BlackListSerializer,ShowSearchResultSerializer,DeleteAccountSerializer,AcceptFriendRequestSerializer, ChangePasswordSerializer,RejectFriendRequestSerializer, ListProfileSerializer,RemoveFriendSerializer,ListUserSerializer, ListFriendsSerializer, ListRequestSerializer,ReceiveMessageSerializer
 from rest_framework import status
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -198,8 +198,6 @@ class ListProfile(APIView):
 class ChangeProfilePicture(APIView):
     pass
 
-class ChangeAboutView(APIView):
-    pass
 
 class SetTheme(APIView):
     pass
@@ -466,3 +464,36 @@ class FetchProfilePicture(APIView):
 
         except Exception as e:
             return Response( {'message':str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class FetchAbout(APIView):
+    def get(self, request, user_id):
+        try:
+            user = get_object_or_404(User, id=user_id)
+            profile = get_object_or_404(Profile, user=user)
+            serializer = FetchAboutSerializer(profile)
+            return Response(serializer.data)
+
+        except Exception as e:
+            return Response( {'message':str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class ChangeAboutView(APIView):
+    # permission_classes = (IsAuthenticated,)
+    def post(self, request):
+        try:
+            serializer = ChangeAboutSerializer(data=request.data)
+            if serializer.is_valid():
+                user_id = serializer.validated_data['user_id']
+                about = serializer.validated_data['about']
+                user = User.objects.get(id=user_id)
+                print(user)
+                user_profile = Profile.objects.get(user=user)
+                user_profile.about = about
+                user_profile.save()
+                return Response({'message':'users about have been updated','about' : user_profile.about},status= status.HTTP_200_OK)
+            else:
+                return Response(serializer.errors,status = status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'message':str(e)},status= status.HTTP_400_BAD_REQUEST)

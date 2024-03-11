@@ -1,6 +1,8 @@
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.urls import path, include
-from .views import SendMessageView,FetchProfilePicture,RetrieveMessageView,GetCurrentUser,SaveProfilePicture,SendFriendRequest,EmailAvailability,ListFriendRequest,SearchUserView,UsernameAvailability,ListMessageView,ContactFormView,AcceptFriendRequest,RejectFriendRequest,RemoveFriend,WhitelistView,BlackListView,ListFriends,ListBlackListView,ListUsers,ListProfile,ChangePassword,DeleteAccount
+from django.conf import settings
+from django.conf.urls.static import static
+from .views import SendMessageView,ChangeAboutView,FetchAbout,FetchProfilePicture,RetrieveMessageView,GetCurrentUser,SaveProfilePicture,SendFriendRequest,EmailAvailability,ListFriendRequest,SearchUserView,UsernameAvailability,ListMessageView,ContactFormView,AcceptFriendRequest,RejectFriendRequest,RemoveFriend,WhitelistView,BlackListView,ListFriends,ListBlackListView,ListUsers,ListProfile,ChangePassword,DeleteAccount
 urlpatterns = [
     path('send-message/', SendMessageView.as_view(), name='send-message'),
     path('retreive-message/', RetrieveMessageView.as_view(), name='retrieve-message'),
@@ -24,4 +26,8 @@ urlpatterns = [
     path('availability-email/', EmailAvailability.as_view(), name='email_availability'),
     path('save-profile/', SaveProfilePicture.as_view(), name='save_profile_picture'),
     path('fetch-profile/<int:user_id>/', FetchProfilePicture.as_view(), name='fetch_profile_picture'),
+    path('fetch-about/<int:user_id>/', FetchAbout.as_view(), name='fetch_about'),
+    path('edit-about/', ChangeAboutView.as_view(), name='change_about'),
 ]
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
