@@ -1,5 +1,5 @@
 from .models import Message,Friendship,PendingRequest,User,Profile,BlackListedUsers,ContactForm
-from .serializers import SendMessageSerializer,FetchAboutSerializer,EmailAvailabilitySerializer,ChangeAboutSerializer,ProfilePictureSerializer,UsernameAvailabilitySerializer,UsernameSerializer,FriendRequestSerializer,ListMessageSerializer,ContactFormSerializer,FetchProfilePictureSerializer,ListBlackListSerializer,BlackListSerializer,ShowSearchResultSerializer,DeleteAccountSerializer,AcceptFriendRequestSerializer, ChangePasswordSerializer,RejectFriendRequestSerializer, ListProfileSerializer,RemoveFriendSerializer,ListUserSerializer, ListFriendsSerializer, ListRequestSerializer,ReceiveMessageSerializer
+from .serializers import SendMessageSerializer,SendUserSerializer,FetchAboutSerializer,EmailAvailabilitySerializer,ChangeAboutSerializer,ProfilePictureSerializer,UsernameAvailabilitySerializer,UsernameSerializer,FriendRequestSerializer,ListMessageSerializer,ContactFormSerializer,FetchProfilePictureSerializer,ListBlackListSerializer,BlackListSerializer,ShowSearchResultSerializer,DeleteAccountSerializer,AcceptFriendRequestSerializer, ChangePasswordSerializer,RejectFriendRequestSerializer, ListProfileSerializer,RemoveFriendSerializer,ListUserSerializer, ListFriendsSerializer, ListRequestSerializer,ReceiveMessageSerializer
 from rest_framework import status
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -7,35 +7,110 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.db import models
 from django.shortcuts import get_object_or_404
-from chatroom.consumer import send_realtime_message
+from django.http import Http404
+import base64
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from .tasks import send_contact_email
 
+# class SendMessageView(APIView):
+#         permission_classes = (IsAuthenticated,)
+#         def post(self, request):
+#             try:
+#                 serializer = SendMessageSerializer(data=request.data)
+#                 if serializer.is_valid():
+#                     sender = request.user
+#                     content = serializer.validated_data['content']
+#                     receiver = serializer.validated_data['receiver']
+#                     are_friends = Friendship.objects.filter(models.Q(user1=request.user,user2=receiver) | models.Q(user1=receiver,user2=request.user)).exists()
+#                     if not are_friends:
+#                         return Response({'message':f'{request.user} is not friends with {receiver}'},status=status.HTTP_400_BAD_REQUEST)
+#
+#                     Message.objects.create(
+#                         sender=sender,
+#                         receiver=receiver,
+#                         content=content,
+#                     )
+#
+#                     return Response({'message':'message sent successfully','data':serializer.data},status=status.HTTP_200_OK)
+#
+#                 return Response({'message':serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+#             except Exception as e:
+#                 return Response({'message':str(e)},status=status.HTTP_400_BAD_REQUEST)
+# class SendMessageView(APIView):
+#     # permission_classes = (IsAuthenticated,)
+#
+#     def post(self, request):
+#         try:
+#             serializer = SendMessageSerializer(data=request.data)
+#             if serializer.is_valid():
+#                 sender = serializer.validated_data['sender']
+#                 content = serializer.validated_data['content']
+#                 receiver = serializer.validated_data['receiver']
+#                 are_friends = Friendship.objects.filter(
+#                     models.Q(user1=request.user, user2=receiver) |
+#                     models.Q(user1=receiver, user2=request.user)
+#                 ).exists()
+#                 if not are_friends:
+#                     return Response({'message': f'{request.user} is not friends with {receiver}'}, status=status.HTTP_400_BAD_REQUEST)
+#
+#                 message = Message.objects.create(
+#                     sender=sender,
+#                     receiver=receiver,
+#                     content=content,
+#                 )
+#
+#                 # Send message via WebSocket
+#                 channel_layer = get_channel_layer()
+#                 async_to_sync(channel_layer.group_send)(
+#                     'chat_room',
+#                     {
+#                         'type': 'chat_message',
+#                         'message': content,
+#                         'username': sender.username,
+#                         'timestamp': message.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+#                     }
+#                 )
+#
+#                 return Response({'message': 'message sent successfully', 'data': serializer.data}, status=status.HTTP_200_OK)
+#
+#             return Response({'message': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+#         except Exception as e:
+#             return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 class SendMessageView(APIView):
-        permission_classes = (IsAuthenticated,)
-        def post(self, request):
-            try:
-                serializer = SendMessageSerializer(data=request.data)
-                if serializer.is_valid():
-                    sender = request.user
-                    content = serializer.validated_data['content']
-                    receiver = serializer.validated_data['receiver']
-                    are_friends = Friendship.objects.filter(models.Q(user1=request.user,user2=receiver) | models.Q(user1=receiver,user2=request.user)).exists()
-                    if not are_friends:
-                        return Response({'message':f'{request.user} is not friends with {receiver}'},status=status.HTTP_400_BAD_REQUEST)
+    # permission_classes = (IsAuthenticated,)
 
-                    Message.objects.create(
-                        sender=sender,
-                        receiver=receiver,
-                        content=content,
-                    )
+    def post(self, request):
+        try:
+            serializer = SendMessageSerializer(data=request.data)
+            if serializer.is_valid():
+                sender = serializer.validated_data['sender']
+                content = serializer.validated_data['content']
+                receiver = serializer.validated_data['receiver']
+                print(sender)
+                print(receiver)
+                print(content)
+                are_friends = Friendship.objects.filter(
+                    models.Q(user1=sender, user2=receiver) |
+                    models.Q(user1=receiver, user2=sender)
+                ).exists()
+                if not are_friends:
+                    return Response({'message': f'{sender} is not friends with {receiver}'}, status=status.HTTP_400_BAD_REQUEST)
 
-                    return Response({'message':'message sent successfully','data':serializer.data},status=status.HTTP_200_OK)
+                message = Message.objects.create(
+                    sender=sender,
+                    receiver=receiver,
+                    content=content,
+                )
 
-                return Response({'message':serializer.errors},status=status.HTTP_400_BAD_REQUEST)
-            except Exception as e:
-                return Response({'message':str(e)},status=status.HTTP_400_BAD_REQUEST)
 
+
+                return Response({'message': 'message sent successfully', 'data': serializer.data}, status=status.HTTP_200_OK)
+
+            return Response({'message': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class RetrieveMessageView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -64,30 +139,52 @@ class ListMessageView(APIView):
         except Exception as e:
             return Response(str(e),status=status.HTTP_400_BAD_REQUEST)
 
-
+#
+# class SendFriendRequest(APIView):
+#     permission_classes = (IsAuthenticated,)
+#     def post(self,request):
+#         try:
+#             serializer = FriendRequestSerializer(data=request.data)
+#             if serializer.is_valid():
+#                 user = serializer.validated_data['user']
+#                 existing_friendship = Friendship.objects.filter(models.Q(user1=request.user, user2=user) | models.Q(user1=user, user2=request.user)).exists()
+#                 if not existing_friendship:
+#                     PendingRequest.objects.create(
+#                         user=user,
+#                         sender=request.user,
+#
+#                     )
+#                     return Response({'message': 'friend request is sent successfully'}, status=status.HTTP_200_OK)
+#                 else:
+#                     return Response({'message': f'you and {user} are already friends'}, status=status.HTTP_400_BAD_REQUEST)
+#             else:
+#                 return Response({'message': serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+#
+#         except Exception as e:
+#             return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+#
 class SendFriendRequest(APIView):
-    permission_classes = (IsAuthenticated,)
-    def post(self,request):
+    def post(self, request):
         try:
             serializer = FriendRequestSerializer(data=request.data)
             if serializer.is_valid():
-                user = serializer.validated_data['user']
-                existing_friendship = Friendship.objects.filter(models.Q(user1=request.user, user2=user) | models.Q(user1=user, user2=request.user)).exists()
+                current_user = serializer.validated_data['user']
+                friend = serializer.validated_data['sender']
+                token = serializer.validated_data['token']
+                existing_friendship = Friendship.objects.filter(models.Q(user1=current_user, user2=friend) | models.Q(user1=friend, user2=current_user)).exists()
                 if not existing_friendship:
                     PendingRequest.objects.create(
-                        user=user,
-                        sender=request.user,
-
+                        token=token,
+                        user=friend,
+                        sender=current_user,
                     )
-                    return Response({'message': 'friend request is sent successfully'}, status=status.HTTP_200_OK)
+                    return Response({'message': 'Friend request sent successfully'}, status=status.HTTP_200_OK)
                 else:
-                    return Response({'message': f'you and {user} are already friends'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'message': f'You and {current_user} are already friends'}, status=status.HTTP_400_BAD_REQUEST)
             else:
-                return Response({'message': serializer.errors},status=status.HTTP_400_BAD_REQUEST)
-
+                return Response({'message': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 
 # class GetCurrentUser(APIView):
 #     permission_classes = (IsAuthenticated,)
@@ -115,7 +212,7 @@ class GetCurrentUser(APIView):
             return Response(str(e), status=status.HTTP_400_BAD_REQUEST)
 
 class ListFriendRequest(APIView):
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
     def get(self, request):
 
         blacklisted_user = BlackListedUsers.objects.filter(user=request.user)
@@ -124,23 +221,66 @@ class ListFriendRequest(APIView):
         serializer = ListRequestSerializer(filtered_request, many=True,context={'request':request})
         return Response(serializer.data,status=status.HTTP_200_OK)
 
+#
+# class AcceptFriendRequest(APIView):
+#     # permission_classes = (IsAuthenticated,)
+#     def post(self,request,request_id):
+#         try:
+#             pending_request = get_object_or_404(PendingRequest, id=request_id)
+#             if pending_request == None:
+#                 pending_request =
+#             sender = pending_request.sender
+#             Friendship.objects.create(
+#                 user1=request.user,
+#                 user2=sender,
+#                 status="Accepted"
+#             )
+#
+#             serializer = AcceptFriendRequestSerializer(pending_request)
+#             pending_request.delete()
+#             return Response({'message':f'you and {sender} are now friends','data':serializer.data}, status=status.HTTP_200_OK)
+#         except Http404:
+#
+#         except Exception as e:
+#             return Response({'message':str(e)},status=status.HTTP_400_BAD_REQUEST)
+
 
 class AcceptFriendRequest(APIView):
-    permission_classes = (IsAuthenticated,)
-    def post(self,request,request_id):
-        try:
-            pending_request = get_object_or_404(PendingRequest, id=request_id)
-            sender = pending_request.sender
-            Friendship.objects.create(
-                user1=request.user,
-                user2=sender,
-                status="Accepted"
-            )
-            serializer = AcceptFriendRequestSerializer(pending_request)
-            pending_request.delete()
-            return Response({'message':f'you and {sender} are now friends','data':serializer.data}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({'message':str(e)},status=status.HTTP_400_BAD_REQUEST)
+    # permission_classes = (IsAuthenticated,)
+    def post(self, request):
+        serializer = AcceptFriendRequestSerializer(data=request.data)
+
+        if serializer.is_valid():
+            id = serializer.validated_data.get('id')
+            token = serializer.validated_data.get('token')
+
+            try:
+                if id:
+                    pending_request = get_object_or_404(PendingRequest, id=id)
+                elif token:
+                    pending_request = get_object_or_404(PendingRequest, token=token)
+                else:
+                    return Response({'message': 'Either id or token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                sender = pending_request.sender
+                Friendship.objects.create(
+                    user1=request.user,
+                    user2=sender,
+                    status="Accepted"
+                )
+
+                pending_request.delete()
+                return Response({'message': f'You and {sender} are now friends', 'data': serializer.data}, status=status.HTTP_200_OK)
+
+            except Http404:
+                return Response({'message': 'Friend request not found.'}, status=status.HTTP_404_NOT_FOUND)
+            except Exception as e:
+                return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 
 
 class RejectFriendRequest(APIView):
@@ -165,16 +305,22 @@ class ListFriends(APIView):
 
 class RemoveFriend(APIView):
     permission_classes = (IsAuthenticated,)
-    def post(self,request,friend_id):
+    def post(self,request):
         try:
-            remove_friend = get_object_or_404(User, id=friend_id)
-            remove_friendship = Friendship.objects.get(models.Q(user1=request.user,user2=remove_friend)|models.Q(user1=remove_friend,user2=request.user))
-            if remove_friendship:
-                friend_username = remove_friend.username
-                remove_friendship.delete()
-                return Response({'message': f'you have removed {friend_username} from your friend list'}, status=status.HTTP_200_OK)
+            serializer = RemoveFriendSerializer(data=request.data)
+            if serializer.is_valid():
+                user = serializer.validated_data['user1']
+                friend_id = serializer.validated_data['user2']
+                # remove_friend = get_object_or_404(User, id=friend_id)
+                remove_friendship = Friendship.objects.get(models.Q(user1=user, user2=friend_id)|models.Q(user1=friend_id,user2=user))
+                if remove_friendship:
+                    # friend_username = remove_friend.username
+                    remove_friendship.delete()
+                    return Response({'message': f'you have removed friend from your friend list'}, status=status.HTTP_200_OK)
+                else:
+                    return Response({'message': 'friendship does not exist'}, status=status.HTTP_400_BAD_REQUEST)
             else:
-                return Response({'message': 'friendship does not exist'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'message': serializer.errors},status =status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'message':str(e)},status=status.HTTP_400_BAD_REQUEST)
 
@@ -213,18 +359,17 @@ class BlackListView(APIView):
             serializer = BlackListSerializer(data=request.data)
             if serializer.is_valid():
                 blacklist_id = serializer.validated_data['blocked_user']
-                user=request.user
-                already_blacklisted = BlackListedUsers.objects.filter(blocked_user=blacklist_id).exists()
+                current_user = serializer.validated_data['user']
+                already_blacklisted = BlackListedUsers.objects.filter(user=current_user,blocked_user=blacklist_id).exists()
                 if already_blacklisted:
                     return Response({'message':'the user is already blacklisted'},status=status.HTTP_400_BAD_REQUEST)
-                already_friends = Friendship.objects.filter(models.Q(user1=blacklist_id) | models.Q(user2=blacklist_id))
+                already_friends = Friendship.objects.filter(models.Q(user1=blacklist_id,user2=current_user) | models.Q(user1=current_user,user2=blacklist_id))
                 friendship = already_friends.exists()
                 if friendship:
                     already_friends.delete()
 
-
                 BlackListedUsers.objects.create(
-                    user=request.user,
+                    user=current_user,
                     blocked_user=blacklist_id
                 )
                 return Response({'message':'user blacklisted successfully'},status=status.HTTP_200_OK)
@@ -235,9 +380,8 @@ class BlackListView(APIView):
 
 
 class ListBlackListView(APIView):
-    permission_classes = (IsAuthenticated,)
-    def get(self,request):
-        user = request.user
+    # permission_classes = (IsAuthenticated,)
+    def get(self,request,user):
         query = BlackListedUsers.objects.filter(user=user)
         serializer = ListBlackListSerializer(query,many=True)
         return Response(serializer.data,status=status.HTTP_200_OK)
@@ -249,8 +393,9 @@ class WhitelistView(APIView):
         try:
             serializer = BlackListSerializer(data=request.data)
             if serializer.is_valid():
-                unblock_user_id = serializer.validated_data['blocked_user']
-                blacklist_obj = BlackListedUsers.objects.filter(user=request.user,blocked_user=unblock_user_id)
+                unblock_user = serializer.validated_data['blocked_user']
+                current_user = serializer.validated_data['user']
+                blacklist_obj = BlackListedUsers.objects.filter(user=current_user,blocked_user=unblock_user)
                 if blacklist_obj.exists():
                     blacklist_obj.delete()
                     return Response({"message": "user whitelisted successfully"},status=status.HTTP_200_OK)
@@ -497,3 +642,57 @@ class ChangeAboutView(APIView):
                 return Response(serializer.errors,status = status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'message':str(e)},status= status.HTTP_400_BAD_REQUEST)
+
+
+# class SendUser(APIView):
+#     def post(self,request):
+#         try:
+#             serializer = SendUserSerializer(data=request.data)
+#             if serializer.is_valid():
+#                 user_id = serializer.validated_data['user_id']
+#                 user = User.objects.get(id = user_id)
+#                 user_profile = Profile.objects.get(user=user)
+#                 username = user.username
+#                 profile_picture = user_profile.profile_picture
+#                 if not profile_picture:
+#                     profile_picture = None
+#                 about = user_profile.about
+#
+#
+#                 return Response({'username': username, 'profile_picture': profile_picture, 'about': about},status = status.HTTP_200_OK)
+#
+#             else:
+#                 return Response({'message':serializer.errors},status = status.HTTP_400_BAD_REQUEST)
+#
+#         except Exception as e:
+#             return Response({'message':str(e)},status= status.HTTP_400_BAD_REQUEST)
+#
+
+import base64
+
+class SendUser(APIView):
+    def post(self, request):
+        try:
+            serializer = SendUserSerializer(data=request.data)
+            if serializer.is_valid():
+                user_id = serializer.validated_data['user_id']
+                user = User.objects.get(id=user_id)
+                user_profile = Profile.objects.get(user=user)
+                username = user.username
+                profile_picture = user_profile.profile_picture
+
+                if profile_picture:
+                    # Convert binary data to base64-encoded string
+                    profile_picture = base64.b64encode(profile_picture.read()).decode('utf-8')
+                else:
+                    profile_picture = None
+
+                about = user_profile.about
+
+                return Response({'id':user_id,'username': username, 'profile_picture': profile_picture, 'about': about}, status=status.HTTP_200_OK)
+
+            else:
+                return Response({'message': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)

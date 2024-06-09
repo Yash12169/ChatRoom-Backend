@@ -1,23 +1,15 @@
 import os
+import django
 from django.core.asgi import get_asgi_application
-from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.auth import AuthMiddlewareStack
-from .consumer import ChatConsumer
-from channels.http import AsgiHandler
-from channels.staticfiles import AsgiStaticFilesHandler
-from django.urls import path
+from channels.routing import ProtocolTypeRouter
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'chatroom.settings')
+django.setup()
 
+# This is the ASGI application for Django's HTTP handling.
+django_asgi_app = get_asgi_application()
+
+# This is the application wrapped in Django Channels' ProtocolTypeRouter
 application = ProtocolTypeRouter({
-    "websocket": AuthMiddlewareStack(
-        URLRouter([
-            path("ws/chat/", ChatConsumer.as_asgi()),
-        ])
-    ),
-    "http": AsgiHandler(
-        URLRouter([
-            path("static/", AsgiStaticFilesHandler(directory="static")),  # Assuming static files are in a "static" directory
-        ])
-    ),
+    "http": django_asgi_app,
 })

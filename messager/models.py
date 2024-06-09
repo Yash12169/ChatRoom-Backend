@@ -21,6 +21,7 @@ class Friendship(models.Model):
 
 
 class PendingRequest(models.Model):
+    token=models.TextField(default="")
     user   = models.ForeignKey(User, related_name='pending_request',on_delete=models.CASCADE)
     sender = models.ForeignKey(User, related_name='send_request', on_delete=models.CASCADE)
     message = models.TextField(default=" ")

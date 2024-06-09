@@ -7,7 +7,7 @@ class ListUserSerializer(serializers.ModelSerializer):
         model = User
 class SendMessageSerializer(serializers.ModelSerializer):
     class Meta:
-        fields = ('receiver', 'content','timestamp')
+        fields = ('receiver','sender', 'content','timestamp')
         model = Message
 
 class ReceiveMessageSerializer(serializers.ModelSerializer):
@@ -18,7 +18,7 @@ class ReceiveMessageSerializer(serializers.ModelSerializer):
 
 class FriendRequestSerializer(serializers.ModelSerializer):
     class Meta:
-        fields = ('id','user')
+        fields = ('user','sender','token')
         model = PendingRequest
 
 
@@ -26,18 +26,27 @@ class FriendRequestSerializer(serializers.ModelSerializer):
 
 
 class ListRequestSerializer(serializers.ModelSerializer):
+    susername = serializers.CharField(source='sender.username', read_only=True)
+    profile_picture = serializers.SerializerMethodField()
+
     class Meta:
-        fields = ('id','user','sender','message')
+        fields = ('id', 'user', 'sender', 'message', 'susername', 'profile_picture')
         model = PendingRequest
+
+    def get_profile_picture(self, instance):
+        try:
+            profile = Profile.objects.get(user__username=instance.sender.username)
+            return profile.profile_picture.url
+        except Profile.DoesNotExist:
+            return None
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['susername'] = instance.sender.username
         return representation
 
 class AcceptFriendRequestSerializer(serializers.ModelSerializer):
     class Meta:
-        fields = ('id','user', 'message','sender')
+        fields = ('id','user', 'message','sender','token')
         model = PendingRequest
 
 class RejectFriendRequestSerializer(serializers.ModelSerializer):
@@ -45,10 +54,58 @@ class RejectFriendRequestSerializer(serializers.ModelSerializer):
         fields = ('id', 'user', 'sender', 'message')
         model = PendingRequest
 
+
+class FriendProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ('profile_picture', 'about')
+# class ListFriendsSerializer(serializers.ModelSerializer):
+#     friend_id = serializers.SerializerMethodField()
+#     profile_picture = FriendProfileSerializer(source='get_profile',read_only=True)
+#     class Meta:
+#         fields = ('friend_id','created_at','profile_picture')
+#         model = Friendship
+#
+#     def get_friend_id(self, obj):
+#         request_user_id = self.context['request'].user.id
+#         if obj.user1_id == request_user_id:
+#             return obj.user2_id
+#         elif obj.user2_id == request_user_id:
+#             return obj.user1_id
+#         else:
+#             return None
+#
+#     def get_profile(self, obj):
+#         friend_id = self.get_friend_id(obj)
+#         if friend_id is not None:
+#             try:
+#                 user = User.objects.get(id=friend_id)
+#                 friend_profile = Profile.objects.get(user=user)
+#                 return ProfileSerializer(friend_profile.profile_picture)
+#             except Profile.DoesNotExist:
+#                 return None
+#         return None
+#     def to_representation(self, instance):
+#         representation = super().to_representation(instance)
+#         if instance.user1 == self.context['request'].user:
+#             representation['username'] = instance.user2.username
+#         else:
+#             representation['username'] = instance.user1.username
+#         return representation
+
+class BlackListSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        fields = ('blocked_user', 'user',)
+        model = BlackListedUsers
+
+
 class ListFriendsSerializer(serializers.ModelSerializer):
     friend_id = serializers.SerializerMethodField()
+    friend_profile = serializers.SerializerMethodField()
+
     class Meta:
-        fields = ('friend_id','created_at')
+        fields = ('friend_id', 'created_at', 'friend_profile')
         model = Friendship
 
     def get_friend_id(self, obj):
@@ -59,6 +116,21 @@ class ListFriendsSerializer(serializers.ModelSerializer):
             return obj.user1_id
         else:
             return None
+
+    def get_friend_profile(self, obj):
+        friend_id = self.get_friend_id(obj)
+        if friend_id is not None:
+            try:
+                friend = User.objects.get(id=friend_id)
+                friend_profile = friend.profile
+                return {
+                    'profile_picture': friend_profile.profile_picture.url if friend_profile.profile_picture else None,
+                    'about': friend_profile.about
+                }
+            except Profile.DoesNotExist:
+                return None
+        return None
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         if instance.user1 == self.context['request'].user:
@@ -66,7 +138,6 @@ class ListFriendsSerializer(serializers.ModelSerializer):
         else:
             representation['username'] = instance.user1.username
         return representation
-
 class RemoveFriendSerializer(serializers.ModelSerializer):
     class Meta:
         fields = ('id', 'user1', 'user2')
@@ -97,19 +168,50 @@ class DeleteAccountSerializer(serializers.ModelSerializer):
         model = User
 
 
-class BlackListSerializer(serializers.ModelSerializer):
-    class Meta:
-        fields=('blocked_user',)
-        model = BlackListedUsers
+
 
 class ListBlackListSerializer(serializers.ModelSerializer):
+    blocked_user_profile = serializers.SerializerMethodField()
+
     class Meta:
-        fields=('blocked_user',)
+        fields = ('blocked_user', 'user', 'blocked_user_profile')
         model = BlackListedUsers
+
+    def get_blocked_user_profile(self, obj):
+        try:
+            profile = Profile.objects.get(user=obj.blocked_user)
+            return {
+                'username': obj.blocked_user.username,
+                'profile_picture': profile.profile_picture.url if profile.profile_picture else None,
+                'about': profile.about
+            }
+        except Profile.DoesNotExist:
+            return {
+                'username': obj.blocked_user.username,
+                'profile_picture': None,
+                'about': None
+            }
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        try:
+            profile = Profile.objects.get(user=instance.blocked_user)
+            representation['blocked_user_profile'] = {
+                'username': instance.blocked_user.username,
+                'profile_picture': profile.profile_picture.url if profile.profile_picture else None,
+                'about': profile.about
+            }
+        except Profile.DoesNotExist:
+            representation['blocked_user_profile'] = {
+                'username': instance.blocked_user.username,
+                'profile_picture': None,
+                'about': None
+            }
+        return representation
 
 class ShowSearchResultSerializer(serializers.ModelSerializer):
     class Meta:
-        fields=('user','about')
+        fields=('user','about','profile_picture',)
         model =Profile
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -193,6 +295,17 @@ class ChangeAboutSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ('user_id', 'about',)
+
+    def validate_user_id(self, value):
+        # Add validation logic if needed
+        return value
+
+
+class SendUserSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField()  #
+    class Meta:
+        model = User
+        fields = ('user_id',)
 
     def validate_user_id(self, value):
         # Add validation logic if needed
